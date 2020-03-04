@@ -1,0 +1,42 @@
+{
+        "namespace": "ksql",
+        "name": "played_games",
+        "type": "record",
+        "fields": [
+                {"name": "event_id", "type": {
+                    "type": "int",
+                    "arg.properties": {
+                        "iteration": { "start": 1}
+                    }
+                }},
+                {"name": "game_id", "type": {
+                    "type": "int",
+                    "arg.properties": {
+                        "range": {
+                            "min": 1,
+                            "max": 5
+                        }
+                    }
+                }},
+                {"name": "customer_id", "type": {
+                    "type": "int",
+                    "arg.properties": {
+                        "range": {
+                            "min": 1,
+                            "max": 20
+                        }
+                    }
+                }},
+
+                {"name": "amount", "type": {
+                    "type": "int",
+                    "arg.properties": {
+                        "range": {
+                            "min": -5000,
+                            "max": 5000,
+                            "step": 10
+                        }
+                    }
+                }}
+        ]
+}

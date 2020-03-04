@@ -1,0 +1,236 @@
+---
+version: '2.2'
+services:
+  zookeeper:
+    container_name: gaming-zookeeper
+    image: confluentinc/cp-zookeeper:5.4.0
+    cpus: 0.5
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    container_name: gaming-kafka
+    image: confluentinc/cp-enterprise-kafka:5.4.0
+    depends_on:
+      - zookeeper
+    ports:
+    # Exposes 9092 for external connections to the broker
+    # Use kafka:29092 for connections internal on the docker network
+      - 9092:9092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_BROKER_RACK: "rack-1"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
+      KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 100
+      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: kafka:9092
+      CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:2181
+      CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
+      CONFLUENT_METRICS_REPORTER_MAX_REQUEST_SIZE: 1000012
+      # to avoid race condition with c3
+      CONFLUENT_METRICS_REPORTER_TOPIC_CREATE: "true"
+      CONFLUENT_METRICS_ENABLE: 'false'
+      CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
+      KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
+      KAFKA_LOG4J_LOGGERS: "kafka.controller=WARN,state.change.logger=WARN,kafka.log.LogCleaner=WARN"
+      KAFKA_JMX_PORT: 9991
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      # Schema Validation
+      KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:5.4.0
+    container_name: gaming-schema-registry
+    cpus: 0.4
+    ports:
+      - 8081:8081
+    depends_on:
+      - zookeeper
+      - kafka
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+#      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:2181
+      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "PLAINTEXT://kafka:29092"
+      SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: INFO
+
+
+  connect-ext:
+    image: confluentinc/cp-kafka-connect:5.4.0
+    container_name: gaming-connect
+    depends_on:
+      - zookeeper
+      - kafka
+      - schema-registry
+    ports:
+      - 8083:8083
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: "kafka:29092"
+      CONNECT_REST_PORT: 8083
+      CONNECT_REST_ADVERTISED_HOST_NAME: "connect-ext"
+      CONNECT_GROUP_ID: connect-ext
+      CONNECT_CONFIG_STORAGE_TOPIC: _connect-ext-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: _connect-ext-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: _connect-ext-status
+      CONNECT_KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
+      CONNECT_LOG4J_ROOT_LOGLEVEL: "INFO"
+      CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.reflections=ERROR"
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_PLUGIN_PATH: '/usr/share/java,/usr/share/confluent-hub-components,/local-connect-jars'
+      CONNECT_PRODUCER_INTERCEPTOR_CLASSES: "io.confluent.monitoring.clients.interceptor.MonitoringProducerInterceptor"
+      CONNECT_CONSUMER_INTERCEPTOR_CLASSES: "io.confluent.monitoring.clients.interceptor.MonitoringConsumerInterceptor"
+    volumes:
+      - ./confluent-hub-components:/local-connect-jars
+      - ./datagen:/datagen
+    command: 
+      - /bin/bash
+      - -c 
+      - |
+
+        # Now launch Kafka Connect
+        /etc/confluent/docker/run &
+        #
+        echo "Waiting for Kafka Connect to start listening on $$CONNECT_REST_ADVERTISED_HOST_NAME ⏳"
+        while [ $$(curl -s -o /dev/null -w %{http_code} http://$$CONNECT_REST_ADVERTISED_HOST_NAME:$$CONNECT_REST_PORT/connectors) -ne 200 ] ; do 
+          echo -e $$(date) " Kafka Connect listener HTTP state: " $$(curl -s -o /dev/null -w %{http_code} http://$$CONNECT_REST_ADVERTISED_HOST_NAME:$$CONNECT_REST_PORT/connectors) " (waiting for 200)"
+          sleep 5 
+        done
+        echo "Waiting for Schema Registry to start listening on schema-registry:8081 ⏳"
+        while [ $$(curl -s -o /dev/null -w %{http_code} http://schema-registry:8081) -eq 000 ] ; do 
+          echo -e $$(date) " Schema Registry listener HTTP state: " $$(curl -s -o /dev/null -w %{http_code} http://schema-registry:8081) " (waiting for != 000)"
+          sleep 5 
+        done
+        #
+        echo "Creating datagen connector 1"
+        curl -s -X PUT -H  "Content-Type:application/json" http://localhost:8083/connectors/played_games/config \
+            -d '{
+            "connector.class": "io.confluent.kafka.connect.datagen.DatagenConnector",
+            "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+            "kafka.topic": "games_events",
+            "max.interval": 1000,
+            "schema.filename": "/datagen/games_service.avro",
+            "schema.keyfield": "event_id"
+          }'
+        # Don't let the container die
+        sleep infinity
+
+
+  ksql-server:
+    image: confluentinc/cp-ksql-server:5.4.0
+    # image: confluentinc/ksqldb-server:0.7.0
+    container_name: gaming-ksql-server
+    depends_on:
+      - kafka
+      - schema-registry
+    cpus: 1.0
+    ports:
+      - 8088:8088
+    environment:
+      KSQL_CUB_KAFKA_TIMEOUT: 120
+      KSQL_BOOTSTRAP_SERVERS: kafka:29092
+      KSQL_LISTENERS: http://0.0.0.0:8088
+      KSQL_KSQL_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      KSQL_KSQL_SERVICE_ID: gaming_
+      KSQL_KSQL_CONNECT_URL: http://connect-ext:8083
+      # uncomment this one to launch a Connect worker INSIDE the KSQL JVM
+      # KSQL_KSQL_CONNECT_WORKER_CONFIG: /etc/ksql/worker.properties
+      KSQL_KSQL_LOGGING_PROCESSING_TOPIC_AUTO_CREATE: "true"
+      KSQL_KSQL_LOGGING_PROCESSING_STREAM_AUTO_CREATE: "true"
+      KSQL_KSQL_LOGGING_PROCESSING_TOPIC_PARTITIONS: 2
+      KSQL_KSQL_LOGGING_PROCESSING_TOPIC_REPLICATION_FACTOR: 1
+      KSQL_PRODUCER_INTERCEPTOR_CLASSES: "io.confluent.monitoring.clients.interceptor.MonitoringProducerInterceptor"
+      KSQL_CONSUMER_INTERCEPTOR_CLASSES: "io.confluent.monitoring.clients.interceptor.MonitoringConsumerInterceptor"
+      KSQL_KSQL_COMMIT_INTERVAL_MS: 2000
+      KSQL_KSQL_CACHE_MAX_BYTES_BUFFERING: 10000000
+    healthcheck:
+      disable: true
+
+
+  ksql-cli:
+    # *-----------------------------*
+    # To connect to the KSQL CLI: 
+    #   docker exec -it ksql-cli ksql http://ksql-server:8088
+    # *-----------------------------*
+    container_name: gaming-ksql-cli
+    image: confluentinc/cp-ksql-cli:5.4.0
+    # image: confluentinc/ksqldb-cli:0.7.0
+    cpus: 0.8
+    depends_on:
+      - ksql-server
+    entrypoint: /bin/sh
+    tty: true
+    
+
+# Other systems
+  mysql:
+    # *-----------------------------*
+    # To connect to the DB: 
+    #   docker-compose exec mysql bash -c 'mysql -u root -p$MYSQL_ROOT_PASSWORD'
+    # *-----------------------------*
+    image: mysql:8.0
+    container_name: gaming-mysql
+    cpus: 0.5
+    ports:
+      - 3306:3306
+    environment:
+     - MYSQL_ROOT_PASSWORD=confluent
+     # specify an empty database to be created, adn a user with all rights to it, on FIRST startup
+     - MYSQL_DATABASE=db4
+     - MYSQL_USER=mysqluser
+     - MYSQL_PASSWORD=mysqlpass
+    volumes:
+     - ./data/mysql:/docker-entrypoint-initdb.d/
+
+
+  control-center:
+    image: confluentinc/cp-enterprise-control-center:5.4.0
+    hostname: control-center
+    container_name: gaming-control-center
+    depends_on:
+      - zookeeper
+      - kafka
+      - schema-registry
+      - connect-ext
+      - ksql-server
+    cpus: 0.8
+    ports:
+      - "9021:9021"
+    environment:
+      CONTROL_CENTER_BOOTSTRAP_SERVERS: 'kafka:29092'
+      CONTROL_CENTER_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      CONTROL_CENTER_CONNECT_GAMING_CLUSTER: 'http://connect-ext:8083'
+      CONTROL_CENTER_KSQL_GAMING_URL: "http://ksql-server:8088"
+      CONTROL_CENTER_KSQL_GAMING_ADVERTISED_URL: "http://localhost:8088"
+      CONTROL_CENTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+      CONTROL_CENTER_REPLICATION_FACTOR: 1
+      CONTROL_CENTER_INTERNAL_TOPICS_PARTITIONS: 1
+      CONTROL_CENTER_INTERNAL_TOPICS_REPLICATION: 1
+      CONTROL_CENTER_MONITORING_INTERCEPTOR_TOPIC_PARTITIONS: 1
+      CONTROL_CENTER_MONITORING_INTERCEPTOR_TOPIC_REPLICATION: 1
+      CONTROL_CENTER_METRICS_TOPIC_PARTITIONS: 1
+      CONTROL_CENTER_METRICS_TOPIC_REPLICATION: 1
+      CONTROL_CENTER_COMMAND_TOPIC_REPLICATION: 1
+      CONFLUENT_METRICS_TOPIC_REPLICATION: 1
+      CONTROL_CENTER_STREAMS_NUM_STREAM_THREADS: 2
+      CONTROL_CENTER_STREAMS_CACHE_MAX_BYTES_BUFFERING: 104857600
+      CONTROL_CENTER_DEPRECATED_VIEWS_ENABLE: "true"
+      CONTROL_CENTER_LOG4J_ROOT_LOGLEVEL: WARN
+      CONTROL_CENTER_REST_LISTENERS: "http://0.0.0.0:9021"
+      PORT: 9021
+
+#      CONTROL_CENTER_STREAMS_CONSUMER_REQUEST_TIMEOUT_MS: "960032"
