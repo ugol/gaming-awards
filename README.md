@@ -1,3 +1,5 @@
+```
+
 docker-compose down --remove-orphans --volumes
 docker-compose up
 docker-compose ps
@@ -66,7 +68,7 @@ docker exec -it gaming-mysql mysql -uroot -pconfluent
 update CUSTOMERS set first_name = 'Master', last_name='Test' where id = 1;
 
 create stream games_events with (kafka_topic='games_events', value_format='avro');
-create stream enriched_games_events as select g.amount, c.first_name, c.last_name from games_events g left join customers c on g.customer_id = c.id;
+create stream enriched_games_events as select g.amount, c.first_name, c.last_name from games_events g left join customers c``` on g.customer_id = c.id;
 
 select * from ENRICHED_GAMES_EVENTS emit changes;
 
@@ -74,3 +76,4 @@ create table win_totals as select customer_id, sum(amount) from games_events gro
 
 create table win_totals_enriched as select c.first_name, c.last_name, t.ksql_col_1 from win_totals t left join customers c on t.customer_id = c.id;
 
+```
