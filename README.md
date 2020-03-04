@@ -68,7 +68,7 @@ docker exec -it gaming-mysql mysql -uroot -pconfluent
 update CUSTOMERS set first_name = 'Master', last_name='Test' where id = 1;
 
 create stream games_events with (kafka_topic='games_events', value_format='avro');
-create stream enriched_games_events as select g.amount, c.first_name, c.last_name from games_events g left join customers c``` on g.customer_id = c.id;
+create stream enriched_games_events as select g.amount, c.first_name, c.last_name from games_events g left join customers c on g.customer_id = c.id;
 
 select * from ENRICHED_GAMES_EVENTS emit changes;
 
