@@ -296,4 +296,17 @@ create table win_totals_enriched as select c.first_name, c.last_name, t.ksql_col
 select * from win_totals_enriched emit changes;
 ```
 
-TODO: windows aggregates
+We now have a table with the total wins, which is continuously updated while the data flows.
+
+## Accessing the state store via REST
+
+TODO
+
+## Time and aggregation
+
+TODO
+
+## Conclusions
+
+TODO
+...
