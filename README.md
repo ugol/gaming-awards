@@ -277,7 +277,7 @@ Let's create a stream from the games_events topic first. That's the topic with r
 create stream games_events with (kafka_topic='games_events', value_format='avro');
 ```
 
-We can now create an enriched stream with the customers details, doing a left join between the stream itself and the Customers table
+We can now create an enriched stream with the customers details, doing a [left join](https://docs.confluent.io/current/ksql/docs/developer-guide/join-streams-and-tables.html) between the stream itself and the Customers table
 
 ```
 create stream enriched_games_events as select g.amount, c.first_name, c.last_name from games_events g left join customers c on g.customer_id = c.id;
@@ -290,5 +290,8 @@ Let's now apply the same concepts and create a table with the total wins for eac
 ```
 create table win_totals as select customer_id, sum(amount) from games_events group by customer_id emit changes;
 create table win_totals_enriched as select c.first_name, c.last_name, t.ksql_col_1 from win_totals t left join customers c on t.customer_id = c.id;
+
+select * from win_totals_enriched emit changes;
 ```
+
 TODO: windows aggregates
