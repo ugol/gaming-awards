@@ -1,3 +1,5 @@
+# Setup
+
 Open up a terminal session, navigate to the gaming-awards directory
 
 ```
@@ -38,9 +40,17 @@ For reference, if you get strange errors or images that cannot go up correctly, 
 docker-compose down --remove-orphans --volumes
 ```
 
-So, now that everything is up, let's be sure that's *really* up. If the ```docker-compose up``` command is still logging like hell, it's probably not really ready. You can try to connect to http://localhost:9021. If you see a nice green healthy cluster, you're ready.
+So, now that everything is up, let's be sure that's *really* up. If the ```docker-compose up``` command is still logging like hell, it's probably not really ready. You can try to connect to http://localhost:9021. If you see a nice green healthy cluster, you're ready. 
 
-<IMAGE>
+IMAGE
+
+## Use Case
+
+The architecture of this demo is to show a use case where a customer has a stream of Gaming events flowing into Kafka, and a couple of tables in a relational DB with some details on customers and the games they are playing. Using Debezium, we will "import" the tables in Kafka and then with KSQL we will build interesting streaming applications to try to get some value from the raw stream data.
+
+IMAGE
+
+## Architecture
 
 As you can see, there are 8 different images running. 
 
@@ -49,19 +59,14 @@ Core kafka:
 - kafka broker (gaming-kafka)
 - schema registry (gaming-schema-registry)
 
-Connect & KSQL:
+Connect & ksqlDB:
 - connect server (gaming-connect)
-- ksql server (gaming-ksql-server)
-- ksql command line (gaming-ksql-cli)
+- ksqlDB server (gaming-ksql-server)
+- ksqlDB command line (gaming-ksql-cli)
 
 Then there is also:
 - confluent control center (gaming-control-center), the graphical user interface to monitor and manage the cluster
 - a mysql instance (gaming-mysql)
-
-The architecture of this demo is to show a use case where a customer has a stream of Gaming events flowing into Kafka, and a couple of tables in a relational DB with some details on customers and the games they are playing. Using Debezium, we will "import" the tables in Kafka and then with KSQL we will build interesting streaming applications to try to get some value from the raw stream data.
-
-<IMAGE>
-
 Let's have a look at the project directory structure
 
 ```
@@ -93,6 +98,8 @@ The ```data``` directory contains some SQL scripts to prepare the ```CUSTOMERS``
 The ```datagen``` directory contains an avro file which is by a datagen connector to create the raw gaming events
 The ```docker-compose.yml``` is the file containing the definitions of all the docker images involved and the glue - mostly environment variables - to connect all of them together 
 
+## Let's look at the MySQL database
+
 Now open up a new terminal and have a look now at the Mysql tables. You can do that with the following commands
 
 ```
@@ -102,7 +109,9 @@ select * from CUSTOMERS;
 select * from GAMES;
 ```
 
-Now exit from mysql and connect to KSQL CLI:
+## Let's stream!
+
+Now you can exit from mysql command line and connect to the ksqlDB CLI:
 
 ```
 docker exec -it gaming-ksql-cli ksql http://ksql-server:8088
@@ -143,23 +152,40 @@ Have a look at the running connectors and the new topics that debezium created:
 show connectors;
 show topics;
 ```
-
+It is possible to print directly from the topics. Note that topics are case-sensitive so need we to single-quote the topic names and correctly case them whenever we have to reference them. In contrast, all ksqlDB constructs are case-insensitive, as it is in most DBs.
 
 ```
-set 'auto.offset.reset'='earliest';
 print 'gaming.demo.CUSTOMERS-cdc';
 print 'gaming.demo.GAMES-cdc';
+print 'gaming.demo.CUSTOMERS-cdc' limit 10;
 ```
 
-Let's now create a customer stream, getting data from the topic that debezium created:
+Let's now create a customer stream, getting data from the topic that debezium created. For now, we won't transform the data but 
 
 ```
 CREATE STREAM customers_cdc WITH (kafka_topic='gaming.demo.CUSTOMERS-cdc', value_format='avro');
 ```
+Because we aren’t yet generating any new changes in the MySQL database, if you want to run some test queries against this new stream to see the actual data, you will first need to run
+```
+set 'auto.offset.reset'='earliest';
+```
+to force your subsequent queries to read the underlying topic from the earliest message offset or you won’t see any output. This is exactly the same as the "earliest / latest" parameter you use with a normal consumer. (Each new query creates a new consumer group).
+
+Let's now finally try a query!
 
 ```
 select * from CUSTOMERS_CDC emit changes;
+```
 
+The output is not very nice and a bit confusing, unfortunately: that's because the topic created from Debezium is a complex structure containing a list of rows:
+
+- metadata about the db transaction which caused the row to change
+- a 'before' struct of the changed row, containing "old" data. This will be empty in case of an 'insert'.
+- an 'after' struct of the changed row containing "new" data. This will be empty in case of a 'delete').
+
+So let's now "flatten" the stream in a more readable one:
+
+```
 create stream customers_flat with (partitions=1) as
 select after->id as id,
        after->first_name as first_name,
@@ -171,16 +197,19 @@ from customers_cdc
 partition by id;
 ```
 
+And look at the data now
+
 ```
 select * from CUSTOMERS_FLAT EMIT CHANGES;
 ```
 
+Much better,no?
+
+Let's do the same for the GAMES topic
+
 ```
 CREATE STREAM games_cdc WITH (kafka_topic='gaming.demo.GAMES-cdc', value_format='avro');
-```
 
-
-```
 create stream games_flat with (partitions=1) as
 select after->id as id,
        after->name as name
@@ -188,12 +217,16 @@ from games_cdc
 partition by id;
 ```
 
+We can now create two tables, starting from the topics implicitly create byt the streams:
+
 ```
 CREATE TABLE customers WITH(kafka_topic='CUSTOMERS_FLAT', value_format='avro', key='ID');
 CREATE TABLE games WITH(kafka_topic='GAMES_FLAT', value_format='avro', key='ID');
+
+SELECT * from customers EMIT CHANGES;
 ```
 
-
+If we now update the data in he Mysql tables, which you can easily do opening a new terminal, you should be able to see how the data in the ksqlDB table changes almost immediately, thanks to the CDC: 
 
 ```
 docker exec -it gaming-mysql mysql -uroot -pconfluent
