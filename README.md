@@ -96,8 +96,8 @@ ugol@streammo:~/Documents/src/ksql-gaming-awards$ tree -L 3
 └── README.md
 ```
 - ```confluent-hub-components``` contains two connectors, namely datagen and debezium.
--- [Datagen](https://github.com/confluentinc/kafka-connect-datagen) is a special kind of connector which is useful to create traffic.
--- [Debezium](https://debezium.io/) is a CDC project which is great to easily import relational DB tables into kafka.
+  - [Datagen](https://github.com/confluentinc/kafka-connect-datagen) is a special kind of connector which is useful to create traffic.
+  - [Debezium](https://debezium.io/) is a CDC project which is great to easily import relational DB tables into kafka.
 - The ```data``` directory contains some SQL scripts to prepare the ```CUSTOMERS``` and ```GAMES``` tables.
 - The ```datagen``` directory contains an avro file which is by the connector to create *random* raw gaming events
 - The ```docker-compose.yml``` is the file containing the definitions of all the docker images involved and the glue - mostly environment variables - to connect all of them together 
@@ -241,7 +241,7 @@ And look at the data, which shiuld be much readable now.
 select * from CUSTOMERS_FLAT EMIT CHANGES;
 ```
 
-Better,no?
+Better, no?
 
 Let's do the same for the GAMES topic
 
