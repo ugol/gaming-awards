@@ -95,10 +95,12 @@ ugol@streammo:~/Documents/src/ksql-gaming-awards$ tree -L 3
 ├── docker-compose.yml
 └── README.md
 ```
-```confluent-hub-components``` contains two connectors, datagen and debezium. [Datagen](https://github.com/confluentinc/kafka-connect-datagen) is a special kind of connector which is useful to create traffic. [Debezium](https://debezium.io/) is a CDC project which is great to easily import relational DB tables into kafka.
-The ```data``` directory contains some SQL scripts to prepare the ```CUSTOMERS``` and ```GAMES``` tables.
-The ```datagen``` directory contains an avro file which is by a datagen connector to create the raw gaming events
-The ```docker-compose.yml``` is the file containing the definitions of all the docker images involved and the glue - mostly environment variables - to connect all of them together 
+- ```confluent-hub-components``` contains two connectors, namely datagen and debezium.
+-- [Datagen](https://github.com/confluentinc/kafka-connect-datagen) is a special kind of connector which is useful to create traffic.
+-- [Debezium](https://debezium.io/) is a CDC project which is great to easily import relational DB tables into kafka.
+- The ```data``` directory contains some SQL scripts to prepare the ```CUSTOMERS``` and ```GAMES``` tables.
+- The ```datagen``` directory contains an avro file which is by the connector to create *random* raw gaming events
+- The ```docker-compose.yml``` is the file containing the definitions of all the docker images involved and the glue - mostly environment variables - to connect all of them together 
 
 ## Let's look at the MySQL database
 
@@ -142,10 +144,10 @@ Having trouble? Type 'help' (case-insensitive) for a rundown of how things work!
 ksql> 
 ```
 
-YOu are now connected to the ksqlDB CLI (Command Line Interface). This way of interacting with ksqlDB is the so called interactive mode. In production systems, you may want to use the headless mode, which is another [deployment mode](https://docs.confluent.io/current/ksql/docs/concepts/ksql-architecture.html#ksql-deployment-modes
+You are now connected to the ksqlDB CLI (Command Line Interface). This way of interacting with ksqlDB is the so called interactive mode. In production systems, you may want to use the headless mode, which is another [deployment mode](https://docs.confluent.io/current/ksql/docs/concepts/ksql-architecture.html#ksql-deployment-modes
 ) and it's more suited to production environments.  
 
-Note: Ksql is just the "old" name, but eventually all he Ksql labels will be renamed as ksqlDB, which is the new kid on the block: in this demo we will use the new name, but they are the same.
+Note: Ksql is just the "old" name, but eventually all the Ksql labels will be renamed as ksqlDB, which is the new kid on the block: in this demo we will use the new name, but they are the same.
 
 From the ksqlDB command line, you can easily look at the topics and the streams that with the ```show``` command.
 
