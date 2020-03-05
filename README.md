@@ -1,4 +1,6 @@
-# Setup
+# Gaming Awards ksqlDB demo
+
+## Setup
 
 Open up a terminal session, navigate to the gaming-awards directory
 
