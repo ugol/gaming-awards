@@ -142,9 +142,8 @@ Having trouble? Type 'help' (case-insensitive) for a rundown of how things work!
 ksql> 
 ```
 
-YOu are now connected to the ksqlDB CLI (Command Line Interface). This way of interacting with ksqlDB is the so called interactive mode. In production systems, you may want to use the headless mode, which is more suited to production environments.  
-
-https://docs.confluent.io/current/ksql/docs/concepts/ksql-architecture.html#ksql-deployment-modes
+YOu are now connected to the ksqlDB CLI (Command Line Interface). This way of interacting with ksqlDB is the so called interactive mode. In production systems, you may want to use the headless mode, which is another [deployment mode] (https://docs.confluent.io/current/ksql/docs/concepts/ksql-architecture.html#ksql-deployment-modes
+) and it's more suited to production environments.  
 
 Note: Ksql is just the "old" name, but eventually all he Ksql labels will be renamed as ksqlDB, which is the new kid on the block: in this demo we will use the new name, but they are the same.
 
@@ -212,7 +211,7 @@ Let's now finally try a query!
 select * from CUSTOMERS_CDC emit changes;
 ```
 
-Note the ```EMIT CHANGES``` construct: this is a syntax change from the past, which it's a way to distinguish between push https://docs.ksqldb.io/en/latest/concepts/queries/push/  and pull queries https://docs.ksqldb.io/en/latest/concepts/queries/pull/
+Note the ```EMIT CHANGES``` construct: this is a syntax change from the past, which it's a way to distinguish between [push] (https://docs.ksqldb.io/en/latest/concepts/queries/push/)  and [pull](https://docs.ksqldb.io/en/latest/concepts/queries/pull) queries
 
 The output is not very nice and a bit confusing, unfortunately: that's because the topic created from Debezium is a complex structure containing a list of rows:
 
@@ -292,3 +291,4 @@ Let's now apply the same concepts and create a table with the total wins for eac
 create table win_totals as select customer_id, sum(amount) from games_events group by customer_id emit changes;
 create table win_totals_enriched as select c.first_name, c.last_name, t.ksql_col_1 from win_totals t left join customers c on t.customer_id = c.id;
 ```
+TODO: windows aggregates
