@@ -44,7 +44,7 @@ docker-compose down --remove-orphans --volumes
 
 So, now that everything is up, let's be sure that's *really* up. If the ```docker-compose up``` command is still logging like hell, it's probably not really ready. You can try to connect to http://localhost:9021. If you see a nice green healthy cluster, you're ready. 
 
-IMAGE
+![Confluent Control Center](https://github.com/ugol/gaming-awards/blob/master/images/c3.png)
 
 ## Use Case
 
